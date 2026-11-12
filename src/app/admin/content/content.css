@@ -1,0 +1,55 @@
+﻿.cm-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.cm-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.cm-list {
+  display: grid;
+  gap: 5px;
+  max-height: 580px;
+  overflow: auto;
+  margin: 16px 0;
+}
+.cm-list button {
+  display: grid;
+  gap: 5px;
+  background: white;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  padding: 12px;
+  font: inherit;
+  font-size: 13px;
+  color: #315847;
+  cursor: pointer;
+}
+.cm-list button small {
+  font-size: 10px;
+  color: #729180;
+}
+.cm-list button.cm-selected {
+  background: #e7f3ec;
+  font-weight: 800;
+}
+.cm-layout label small {
+  font-weight: 400;
+  color: #7b9086;
+}
+.cm-layout .tm-itinerary-editor > label {
+  margin-bottom: 12px;
+}
+@media (max-width: 900px) {
+  .cm-layout {
+    grid-template-columns: 1fr;
+  }
+  .cm-list {
+    max-height: 200px;
+  }
+}

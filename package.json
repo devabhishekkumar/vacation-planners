@@ -1,0 +1,40 @@
+{
+  "name": "vacation-planners-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:bookings": "node tests/bookings.test.cjs",
+    "test:enquiries": "node tests/enquiries.test.cjs",
+    "test:customer-auth": "node tests/customer-auth.test.cjs",
+    "test:customer-profile": "node tests/customer-profile.test.cjs",
+    "test:reviews": "node tests/reviews.test.cjs",
+    "format": "node scripts/prettier.mjs --write .",
+    "format:check": "node scripts/prettier.mjs --check ."
+  },
+  "dependencies": {
+    "next": "^16.4.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "lucide-react": "^0.468.0",
+    "framer-motion": "^12.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.4.5",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
