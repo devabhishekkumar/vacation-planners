@@ -9,9 +9,8 @@ export const metadata: Metadata = {
   title: 'Contact & Enquiries',
   description: 'Tell Vacation Planners about your dream getaway or a custom holiday enquiry.',
 };
-export default function ContactPage() {
-  const { photos } = getSiteContent();
-
+export default async function ContactPage() {
+  const { photos } = await getSiteContent();
   const wa = getWhatsappUrl('Hello Vacation Planners, I would like to discuss a holiday.');
   return (
     <>
@@ -27,7 +26,7 @@ export default function ContactPage() {
           <div className="contact-copy">
             <span className="eyebrow">GET IN TOUCH</span>
             <h2>
-              Let's create something <em>wonderful together.</em>
+              Let&apos;s create something <em>wonderful together.</em>
             </h2>
             <p>
               Planning a honeymoon, family escape, bucket-list adventure or a quick break? Share a

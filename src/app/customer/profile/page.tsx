@@ -10,8 +10,8 @@ import '../../portal.css';
 export const dynamic = 'force-dynamic';
 export default async function Profile() {
   const user = await requireCustomer('/customer/profile'),
-    profile = customerProfile(user.id);
-  const { bookings } = customerBookings(user.id);
+    profile = await customerProfile(user.id);
+  const { bookings } = await customerBookings(user.id);
   const initials = profile.name
     .split(/\s+/)
     .map((n) => n[0])
@@ -32,7 +32,7 @@ export default async function Profile() {
       <main className="portal-page customer-account-page" id="main-content">
         <section className="customer-profile-hero">
           <div>
-            <span className="customer-account-eyebrow">A SPACE THAT'S YOURS</span>
+            <span className="customer-account-eyebrow">A SPACE THAT&apos;S YOURS</span>
             <h1>
               My profile<span>.</span>
             </h1>

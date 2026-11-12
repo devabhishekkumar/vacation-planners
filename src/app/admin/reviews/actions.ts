@@ -1,10 +1,10 @@
-﻿'use server';
+'use server';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createReview, setReviewPublished } from '@/lib/reviews';
 export async function addReview(f: FormData) {
   try {
-    createReview({
+    await createReview({
       name: f.get('name'),
       destination: f.get('destination'),
       rating: f.get('rating'),
@@ -23,7 +23,7 @@ export async function addReview(f: FormData) {
 }
 export async function publishReview(f: FormData) {
   try {
-    setReviewPublished(String(f.get('id') || ''), f.get('published') === 'true');
+    await setReviewPublished(String(f.get('id') || ''), f.get('published') === 'true');
   } catch (e) {
     redirect(
       '/admin/reviews?message=' +

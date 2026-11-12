@@ -17,27 +17,32 @@ import {
 import { getSiteContent } from '@/lib/content/service';
 import EnquiryForm from '@/components/EnquiryForm';
 import PackageCard from '@/components/PackageCard';
-export function generateStaticParams() {
-  const { packages } = getSiteContent();
-
+export async function generateStaticParams() {
+  const { packages } = await getSiteContent();
   return packages.map((p) => ({ slug: p.slug }));
 }
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }): Promise<Metadata> {
-  const { packages } = getSiteContent();
+  const { packages } = await getSiteContent();
   const getPackage = (slug: string) => packages.find((p) => p.slug === slug);
-
   const { slug } = await params;
   const p = getPackage(slug);
   return { title: p?.title ?? 'Package not found', description: p?.summary };
 }
-export default async function PackageDetails({ params }: { params: Promise<{ slug: string }> }) {
-  const { packages } = getSiteContent();
+export default async function PackageDetails({
+  params,
+}: {
+  params: Promise<{
+    slug: string;
+  }>;
+}) {
+  const { packages } = await getSiteContent();
   const getPackage = (slug: string) => packages.find((p) => p.slug === slug);
-
   const { slug } = await params;
   const tour = getPackage(slug);
   if (!tour) notFound();
@@ -117,7 +122,7 @@ export default async function PackageDetails({ params }: { params: Promise<{ slu
             <div className="detail-block">
               <span className="eyebrow">THE EXPERIENCE</span>
               <h2>
-                Here's where the <em>story begins.</em>
+                Here&apos;s where the <em>story begins.</em>
               </h2>
               <p>
                 {tour.summary} The trip outline below is an example of what your journey could look
@@ -157,7 +162,7 @@ export default async function PackageDetails({ params }: { params: Promise<{ slu
             <div className="detail-block">
               <span className="eyebrow">THE FINE DETAILS</span>
               <h2>
-                What's included <em>and what's not.</em>
+                What&apos;s included <em>and what&apos;s not.</em>
               </h2>
               <div className="includes-grid">
                 <div>
@@ -254,7 +259,7 @@ export default async function PackageDetails({ params }: { params: Promise<{ slu
       <section id="enquire" className="section section-warm">
         <div className="container enquiry-section-layout">
           <div>
-            <span className="eyebrow">LET'S MAKE IT HAPPEN</span>
+            <span className="eyebrow">LET&apos;S MAKE IT HAPPEN</span>
             <h2>
               Make this journey <em>your own.</em>
             </h2>

@@ -4,11 +4,7 @@ import { getPublishedPackage as getPackage } from './content/service';
 import type { Booking, BookingStatus, Payment } from '../features/crm/demo-data';
 const statuses: BookingStatus[] = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 function database() {
-  const d = db();
-  d.exec(`CREATE TABLE IF NOT EXISTS travel_bookings(id TEXT PRIMARY KEY,quote_id TEXT NOT NULL DEFAULT '',payload TEXT NOT NULL);
-CREATE UNIQUE INDEX IF NOT EXISTS booking_quote_unique ON travel_bookings(quote_id) WHERE quote_id!='';
-CREATE TABLE IF NOT EXISTS booking_payments(id TEXT PRIMARY KEY,booking_id TEXT NOT NULL REFERENCES travel_bookings(id),payload TEXT NOT NULL);`);
-  return d;
+  return db();
 }
 const text = (value: unknown, max = 200) =>
   String(value ?? '')
@@ -59,15 +55,17 @@ function validate(input: Partial<Booking>, allowPendingPricing = false): Booking
     notes: text(input.notes, 3000),
   };
 }
-export function bookingSnapshot() {
+export async function bookingSnapshot() {
   const d = database();
-  const payments = d
-    .prepare('SELECT payload FROM booking_payments ORDER BY rowid DESC')
-    .all()
+  // Both collections come from one PostgreSQL statement snapshot.
+  const rows = await d.all(
+    "SELECT 'payment' AS collection,payload,insertion_order FROM booking_payments UNION ALL SELECT 'booking' AS collection,payload,insertion_order FROM travel_bookings ORDER BY insertion_order DESC",
+  );
+  const payments = rows
+    .filter((row) => row.collection === 'payment')
     .map((row) => JSON.parse(row.payload as string) as Payment);
-  const bookings = d
-    .prepare('SELECT payload FROM travel_bookings ORDER BY rowid DESC')
-    .all()
+  const bookings = rows
+    .filter((row) => row.collection === 'booking')
     .map((row) => {
       const b = JSON.parse(row.payload as string) as Booking;
       return {
@@ -77,42 +75,45 @@ export function bookingSnapshot() {
     });
   return { bookings, payments };
 }
-export function createBooking(input: Partial<Booking>) {
+export async function createBooking(input: Partial<Booking>) {
   const d = database(),
     booking = validate(input);
   if (
     booking.quoteId &&
-    d.prepare('SELECT id FROM travel_bookings WHERE quote_id=?').get(booking.quoteId)
+    (await d.get('SELECT id FROM travel_bookings WHERE quote_id=$1', booking.quoteId))
   )
     throw Error('A booking already exists for this quotation.');
-  d.prepare('INSERT INTO travel_bookings VALUES(?,?,?)').run(
+  await d.run(
+    'INSERT INTO travel_bookings(id,quote_id,payload) VALUES($1,$2,$3)',
     booking.id,
     booking.quoteId,
     JSON.stringify(booking),
   );
-  return bookingSnapshot();
+  return await bookingSnapshot();
 }
-export function updateBookingStatus(id: string, status: BookingStatus) {
-  if (!statuses.includes(status)) throw Error('Invalid booking status.');
-  const d = database();
-  const row = d.prepare('SELECT payload FROM travel_bookings WHERE id=?').get(id);
-  if (!row) throw Error('Booking not found.');
-  const booking = JSON.parse(row.payload as string) as Booking;
-  if (booking.pricingPending && ['Confirmed', 'Completed'].includes(status))
-    throw Error('Set the booking price before confirming this request.');
-  if (booking.status === 'Cancelled' && status !== 'Cancelled')
-    throw Error('Cancelled bookings cannot be reopened. Create a new booking.');
-  d.prepare('UPDATE travel_bookings SET payload=? WHERE id=?').run(
-    JSON.stringify({ ...booking, status }),
-    id,
-  );
-  return bookingSnapshot();
+export async function updateBookingStatus(id: string, status: BookingStatus) {
+  return database().transaction(async () => {
+    if (!statuses.includes(status)) throw Error('Invalid booking status.');
+    const d = database();
+    const row = await d.get('SELECT payload FROM travel_bookings WHERE id=$1', id);
+    if (!row) throw Error('Booking not found.');
+    const booking = JSON.parse(row.payload as string) as Booking;
+    if (booking.pricingPending && ['Confirmed', 'Completed'].includes(status))
+      throw Error('Set the booking price before confirming this request.');
+    if (booking.status === 'Cancelled' && status !== 'Cancelled')
+      throw Error('Cancelled bookings cannot be reopened. Create a new booking.');
+    await d.run(
+      'UPDATE travel_bookings SET payload=$1 WHERE id=$2',
+      JSON.stringify({ ...booking, status }),
+      id,
+    );
+    return await bookingSnapshot();
+  });
 }
-export function recordBookingPayment(input: Partial<Payment>) {
+export async function recordBookingPayment(input: Partial<Payment>) {
   const d = database();
-  d.exec('BEGIN IMMEDIATE');
-  try {
-    const snapshot = bookingSnapshot(),
+  return await d.transaction(async () => {
+    const snapshot = await bookingSnapshot(),
       booking = snapshot.bookings.find((b) => b.id === input.bookingId);
     if (!booking || booking.status === 'Cancelled') throw Error('Choose an active booking.');
     const amount = Number(input.amount);
@@ -132,20 +133,17 @@ export function recordBookingPayment(input: Partial<Payment>) {
       method,
       date: new Date().toISOString().slice(0, 10),
     };
-    d.prepare('INSERT INTO booking_payments VALUES(?,?,?)').run(
+    await d.run(
+      'INSERT INTO booking_payments(id,booking_id,payload) VALUES($1,$2,$3)',
       payment.id,
       payment.bookingId,
       JSON.stringify(payment),
     );
-    d.exec('COMMIT');
-    return bookingSnapshot();
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+    return await bookingSnapshot();
+  });
 }
 /** Preserve local bookings from the previous browser-only workspace. */
-export function importLocalBookings(bookings: Booking[], payments: Payment[]) {
+export async function importLocalBookings(bookings: Booking[], payments: Payment[]) {
   const d = database();
   if (
     !Array.isArray(bookings) ||
@@ -154,14 +152,13 @@ export function importLocalBookings(bookings: Booking[], payments: Payment[]) {
     payments.length > 5000
   )
     throw Error('Invalid local booking import.');
-  d.exec('BEGIN IMMEDIATE');
-  try {
+  return await d.transaction(async () => {
     for (const old of bookings) {
-      if (d.prepare('SELECT id FROM travel_bookings WHERE id=?').get(old.id)) continue;
+      if (await d.get('SELECT id FROM travel_bookings WHERE id=$1', old.id)) continue;
       const valid = validate(old, old.pricingPending === true && old.amount === 0);
       if (
         old.quoteId &&
-        d.prepare('SELECT id FROM travel_bookings WHERE quote_id=?').get(old.quoteId)
+        (await d.get('SELECT id FROM travel_bookings WHERE quote_id=$1', old.quoteId))
       )
         continue;
       const booking = {
@@ -170,7 +167,8 @@ export function importLocalBookings(bookings: Booking[], payments: Payment[]) {
         status: statuses.includes(old.status) ? old.status : 'Pending',
       };
       if (!booking.id) throw Error('Invalid booking reference.');
-      d.prepare('INSERT INTO travel_bookings VALUES(?,?,?)').run(
+      await d.run(
+        'INSERT INTO travel_bookings(id,quote_id,payload) VALUES($1,$2,$3)',
         booking.id,
         booking.quoteId,
         JSON.stringify(booking),
@@ -187,7 +185,8 @@ export function importLocalBookings(bookings: Booking[], payments: Payment[]) {
           customer: booking.customer,
         };
         if (!payment.id) throw Error('Invalid payment reference.');
-        d.prepare('INSERT INTO booking_payments VALUES(?,?,?)').run(
+        await d.run(
+          'INSERT INTO booking_payments(id,booking_id,payload) VALUES($1,$2,$3)',
           payment.id,
           booking.id,
           JSON.stringify(payment),
@@ -211,43 +210,35 @@ export function importLocalBookings(bookings: Booking[], payments: Payment[]) {
           date: old.travelDate,
           reference: 'Imported browser balance',
         };
-        d.prepare('INSERT INTO booking_payments VALUES(?,?,?)').run(
+        await d.run(
+          'INSERT INTO booking_payments(id,booking_id,payload) VALUES($1,$2,$3)',
           payment.id,
           booking.id,
           JSON.stringify(payment),
         );
       }
     }
-    d.exec('COMMIT');
-    return bookingSnapshot();
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+    return await bookingSnapshot();
+  });
 }
-
-export function setBookingPrice(id: string, amount: number) {
+export async function setBookingPrice(id: string, amount: number) {
   const d = database();
-  d.exec('BEGIN IMMEDIATE');
-  try {
+  return await d.transaction(async () => {
     if (!Number.isSafeInteger(amount) || amount < 1 || amount > 100000000)
       throw Error('Enter a total from INR 1 to 100,000,000 in whole rupees.');
-    const booking = bookingSnapshot().bookings.find((b) => b.id === id);
+    const booking = (await bookingSnapshot()).bookings.find((b) => b.id === id);
     if (!booking || booking.status === 'Cancelled') throw Error('Choose an active booking.');
     if (amount < booking.paid)
       throw Error('Booking total cannot be less than payments already recorded.');
-    d.prepare('UPDATE travel_bookings SET payload=? WHERE id=?').run(
+    await d.run(
+      'UPDATE travel_bookings SET payload=$1 WHERE id=$2',
       JSON.stringify({ ...booking, amount, pricingPending: false }),
       id,
     );
-    d.exec('COMMIT');
-    return bookingSnapshot();
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+    return await bookingSnapshot();
+  });
 }
-export function createWebsiteBooking(
+export async function createWebsiteBooking(
   input: {
     packageSlug: string;
     customer: string;
@@ -263,11 +254,17 @@ export function createWebsiteBooking(
   customerId: string,
 ) {
   if (!customerId) throw Error('Please sign in to book this package.');
-  const account = db()
-    .prepare("SELECT id,email FROM users WHERE id=? AND role='customer' AND active=1")
-    .get(customerId) as { id: string; email: string } | undefined;
+  const account = (await db().get(
+    "SELECT id,email FROM users WHERE id=$1 AND role='customer' AND active=1",
+    customerId,
+  )) as
+    | {
+        id: string;
+        email: string;
+      }
+    | undefined;
   if (!account) throw Error('Please sign in to book this package.');
-  const tour = getPackage(input.packageSlug);
+  const tour = await getPackage(input.packageSlug);
   if (!tour) throw Error('Select an available travel package.');
   if (!/^[a-zA-Z0-9-]{16,100}$/.test(requestKey))
     throw Error('Invalid booking request reference. Please reload and try again.');
@@ -295,40 +292,37 @@ export function createWebsiteBooking(
   }).format(new Date());
   if (booking.travelDate < today) throw Error('Choose today or a future departure date.');
   const d = database();
-  d.exec(
-    'CREATE TABLE IF NOT EXISTS website_booking_requests(request_key TEXT PRIMARY KEY,booking_id TEXT NOT NULL REFERENCES travel_bookings(id))',
-  );
-  d.exec('BEGIN IMMEDIATE');
-  try {
-    const existing = d
-      .prepare('SELECT booking_id FROM website_booking_requests WHERE request_key=?')
-      .get(requestKey);
+  return await d.transaction(async () => {
+    const existing = await d.get(
+      'SELECT booking_id FROM website_booking_requests WHERE request_key=$1',
+      requestKey,
+    );
     if (existing) {
-      const row = d
-        .prepare('SELECT payload FROM travel_bookings WHERE id=?')
-        .get(existing.booking_id as string);
+      const row = await d.get(
+        'SELECT payload FROM travel_bookings WHERE id=$1',
+        existing.booking_id as string,
+      );
       const previous = JSON.parse(row!.payload as string) as Booking;
       if (previous.customerId !== account.id)
         throw Error('This request reference belongs to another account.');
-      d.exec('COMMIT');
       return { id: existing.booking_id as string, status: previous.status };
     }
-    d.prepare('INSERT INTO travel_bookings VALUES(?,?,?)').run(
+    await d.run(
+      'INSERT INTO travel_bookings(id,quote_id,payload) VALUES($1,$2,$3)',
       booking.id,
       '',
       JSON.stringify(booking),
     );
-    d.prepare('INSERT INTO website_booking_requests VALUES(?,?)').run(requestKey, booking.id);
-    d.exec('COMMIT');
+    await d.run(
+      'INSERT INTO website_booking_requests(request_key,booking_id) VALUES($1,$2)',
+      requestKey,
+      booking.id,
+    );
     return { id: booking.id, status: booking.status };
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+  });
 }
-
-export function customerBookings(customerId: string) {
-  const snapshot = bookingSnapshot();
+export async function customerBookings(customerId: string) {
+  const snapshot = await bookingSnapshot();
   const bookings = snapshot.bookings.filter((b) => b.customerId === customerId);
   const ids = new Set(bookings.map((b) => b.id));
   return { bookings, payments: snapshot.payments.filter((p) => ids.has(p.bookingId)) };

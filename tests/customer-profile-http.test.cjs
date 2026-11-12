@@ -1,3 +1,4 @@
+require('./postgres-guard.cjs');
 const assert = require('node:assert/strict'),
   { spawn } = require('node:child_process'),
   fs = require('node:fs'),

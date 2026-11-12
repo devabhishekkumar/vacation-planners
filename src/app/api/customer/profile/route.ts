@@ -7,7 +7,9 @@ export async function GET() {
   const user = await currentCustomer();
   if (!user)
     return NextResponse.json({ error: 'Please sign in to view your profile.' }, { status: 401 });
-  return NextResponse.json(customerProfile(user.id), { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(await customerProfile(user.id), {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin)
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
   try {
     const input = await request.json();
     if (!input || typeof input !== 'object') throw Error('Invalid profile details.');
-    return NextResponse.json(saveCustomerProfile(user.id, input), {
+    return NextResponse.json(await saveCustomerProfile(user.id, input), {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (e) {

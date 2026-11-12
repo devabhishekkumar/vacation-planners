@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   actor,
   sameOrigin,
@@ -16,12 +16,19 @@ import {
 } from '@/lib/travel/service';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-type Context = { params: Promise<{ bookingId: string }> };
+type Context = {
+  params: Promise<{
+    bookingId: string;
+  }>;
+};
 export async function GET(_request: NextRequest, context: Context) {
   try {
-    return NextResponse.json(travelSnapshot((await context.params).bookingId, await actor()), {
-      headers: privateHeaders,
-    });
+    return NextResponse.json(
+      await travelSnapshot((await context.params).bookingId, await actor()),
+      {
+        headers: privateHeaders,
+      },
+    );
   } catch (error) {
     return failure(error);
   }
@@ -42,7 +49,7 @@ export async function POST(request: NextRequest, context: Context) {
       const file = form.get('file');
       if (!(file instanceof File)) throw new TravelError('Choose a document.');
       return NextResponse.json(
-        uploadTravelDocument(
+        await uploadTravelDocument(
           id,
           user,
           String(form.get('serviceId') || ''),
@@ -56,10 +63,10 @@ export async function POST(request: NextRequest, context: Context) {
     }
     const body = await jsonBody(request);
     if (body.operation === 'notices-read') {
-      readTravelNotices(id, user);
-      return NextResponse.json(travelSnapshot(id, user), { headers: privateHeaders });
+      await readTravelNotices(id, user);
+      return NextResponse.json(await travelSnapshot(id, user), { headers: privateHeaders });
     }
-    return NextResponse.json(mutateTravel(id, user, body), { headers: privateHeaders });
+    return NextResponse.json(await mutateTravel(id, user, body), { headers: privateHeaders });
   } catch (error) {
     return failure(error);
   }

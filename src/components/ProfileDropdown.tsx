@@ -12,10 +12,11 @@ import {
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { customerLogout } from '@/lib/auth/customer-actions';
+import { useRouteToggle } from '@/hooks/useRouteToggle';
 type Account = { name: string; email: string };
 export default function ProfileDropdown({ onOpen }: { onOpen?: () => void }) {
-  const [open, setOpen] = useState(false),
-    [user, setUser] = useState<Account | null>(null),
+  const [open, setOpen] = useRouteToggle();
+  const [user, setUser] = useState<Account | null>(null),
     [loading, setLoading] = useState(true),
     [failed, setFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null),
@@ -23,13 +24,8 @@ export default function ProfileDropdown({ onOpen }: { onOpen?: () => void }) {
     id = useId(),
     pathname = usePathname();
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-  useEffect(() => {
     if (!open) return;
     let active = true;
-    setLoading(true);
-    setFailed(false);
     fetch('/api/customer/session', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw Error('Could not check account.');
@@ -68,7 +64,7 @@ export default function ProfileDropdown({ onOpen }: { onOpen?: () => void }) {
       document.removeEventListener('pointerdown', outside);
       document.removeEventListener('keydown', escape);
     };
-  }, [open]);
+  }, [open, setOpen]);
   return (
     <div
       ref={ref}
@@ -85,7 +81,11 @@ export default function ProfileDropdown({ onOpen }: { onOpen?: () => void }) {
         aria-expanded={open}
         aria-controls={id}
         onClick={() => {
-          if (!open) onOpen?.();
+          if (!open) {
+            onOpen?.();
+            setLoading(true);
+            setFailed(false);
+          }
           setOpen((v) => !v);
         }}
       >

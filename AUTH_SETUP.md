@@ -4,4 +4,4 @@ Customer login and signup are required for website booking requests. See [CUSTOM
 
 Admin and Team remain open without login. Visit /admin or /team directly. Their management actions remain available without account permissions as previously requested.
 
-The /customer page now requires customer sign-in and shows that customer's linked bookings. Existing records are preserved in .data/accounts.sqlite. Historical password fields and activity are retained.
+The /customer page requires customer sign-in and shows that customer's linked bookings. Records now live in Neon PostgreSQL using the private `DATABASE_URL`. Historical password hashes and activity are preserved by the [SQLite migration process](POSTGRES_MIGRATION.md).

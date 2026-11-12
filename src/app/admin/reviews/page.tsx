@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { Star, MessageSquareQuote, ArrowUpRight } from 'lucide-react';
 import { reviews } from '@/lib/reviews';
 import { addReview, publishReview } from './actions';
@@ -6,9 +6,11 @@ export const dynamic = 'force-dynamic';
 export default async function ManageReviews({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string }>;
+  searchParams: Promise<{
+    message?: string;
+  }>;
 }) {
-  const items = reviews(false),
+  const items = await reviews(false),
     { message } = await searchParams;
   return (
     <div className="crm-workspace">
@@ -62,7 +64,7 @@ export default async function ManageReviews({
             </label>
             <label className="reviews-admin-check">
               <input name="permission" type="checkbox" required /> I have permission to publish this
-              customer's review.
+              customer&apos;s review.
             </label>
             <label className="reviews-admin-check">
               <input name="published" type="checkbox" /> Publish on the website now

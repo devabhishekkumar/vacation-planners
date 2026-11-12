@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
         },
         { status: 401 },
       );
-    const result = createWebsiteBooking(
+    const result = await createWebsiteBooking(
       {
         packageSlug: input.packageSlug,
         customer: input.customer,

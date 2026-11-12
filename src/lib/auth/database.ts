@@ -1,20 +1,130 @@
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-let connection: DatabaseSync | undefined;
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { Pool, types, type PoolClient, type QueryResult } from 'pg';
+import { attachDatabasePool } from '@vercel/functions';
+type Row = Record<string, string | number | Buffer | null>;
+type TransactionContext = { client: PoolClient; active: boolean; connectionError?: Error };
+const transactionClient = new AsyncLocalStorage<TransactionContext>();
+let pool: Pool | undefined;
+function logConnectionError(phase: string, error: unknown) {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : 'UNKNOWN';
+  // Preserve useful transport diagnostics without logging credentials or SQL values.
+  console.error('PostgreSQL connection failure', { phase, code });
+}
+function connection() {
+  if (pool) return pool;
+  if (!process.env.DATABASE_URL) throw Error('Set DATABASE_URL on the server.');
+  const schema = process.env.DATABASE_SCHEMA || 'public';
+  if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw Error('Invalid DATABASE_SCHEMA.');
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 5,
+    idleTimeoutMillis: 5000,
+    connectionTimeoutMillis: 15000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+    types: {
+      getTypeParser: (oid, format) =>
+        oid === 20
+          ? (value: string) => {
+              const result = Number(value);
+              if (!Number.isSafeInteger(result))
+                throw Error('Database integer exceeds safe range.');
+              return result;
+            }
+          : types.getTypeParser(oid, format),
+    },
+  });
+  // pg has already removed an idle client before emitting the pool error.
+  // Do not release it a second time or replace the whole pool.
+  pool.on('error', (error) => logConnectionError('idle', error));
+  if (process.env.VERCEL) attachDatabasePool(pool);
+  return pool;
+}
+function assertActive(context: TransactionContext) {
+  if (!context.active) throw Error('Database transaction has already completed.');
+  if (context.connectionError) throw context.connectionError;
+}
+async function execute(context: TransactionContext, sql: string, values: unknown[] = []) {
+  assertActive(context);
+  try {
+    return await context.client.query<Row>(sql, values);
+  } catch (error) {
+    throw context.connectionError || error;
+  }
+}
+async function withTransaction<T>(work: () => Promise<T>, serialize: boolean): Promise<T> {
+  const client = await connection().connect();
+  const context: TransactionContext = { client, active: true };
+  let failed = false;
+  // Pool error listeners only cover idle clients. A checked-out client can emit
+  // error even between statements, when no query promise is awaiting it.
+  const onError = (error: Error) => {
+    context.connectionError ||= error;
+    logConnectionError('checked-out', error);
+  };
+  client.on('error', onError);
+  try {
+    await execute(context, 'BEGIN');
+    await execute(context, `SET LOCAL search_path TO "${process.env.DATABASE_SCHEMA || 'public'}"`);
+    // Keep the same transaction-scoped lock and isolation as existing writes.
+    if (serialize) await execute(context, 'SELECT pg_advisory_xact_lock(817462901)');
+    const result = await transactionClient.run(context, work);
+    await execute(context, 'COMMIT');
+    return result;
+  } catch (error) {
+    failed = true;
+    const original = context.connectionError || error;
+    if (!context.connectionError) {
+      try {
+        await execute(context, 'ROLLBACK');
+      } catch (rollbackError) {
+        logConnectionError('rollback', rollbackError);
+      }
+    }
+    // A failed rollback must never replace the original failure. In particular,
+    // a lost COMMIT acknowledgement is not permission to replay the operation.
+    throw original;
+  } finally {
+    context.active = false;
+    // Explicitly evict on failure, including a failed rollback or a disconnect
+    // that occurred between awaited statements. Release exactly once.
+    client.release(failed || Boolean(context.connectionError));
+    client.removeListener('error', onError);
+  }
+}
+async function query(sql: string, values: unknown[]): Promise<QueryResult<Row>> {
+  const current = transactionClient.getStore();
+  if (current) return execute(current, sql, values);
+  if (!process.env.DATABASE_SCHEMA || process.env.DATABASE_SCHEMA === 'public')
+    return connection().query<Row>(sql, values);
+  return withTransaction(() => query(sql, values), false);
+}
+const database = {
+  async get(sql: string, ...values: unknown[]) {
+    return (await query(sql, values)).rows[0] as Row | undefined;
+  },
+  async all(sql: string, ...values: unknown[]) {
+    return (await query(sql, values)).rows;
+  },
+  async run(sql: string, ...values: unknown[]) {
+    return { changes: (await query(sql, values)).rowCount || 0 };
+  },
+  async transaction<T>(work: () => Promise<T>): Promise<T> {
+    const current = transactionClient.getStore();
+    if (current) {
+      assertActive(current);
+      return work();
+    }
+    return withTransaction(work, true);
+  },
+  async close() {
+    const current = pool;
+    pool = undefined;
+    await current?.end();
+  },
+};
 export function db() {
-  if (connection) return connection;
-  const directory = process.env.AUTH_DATA_DIR || join(process.cwd(), '.data');
-  mkdirSync(directory, { recursive: true });
-  connection = new DatabaseSync(join(directory, 'accounts.sqlite'));
-  connection.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
- CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','team','customer')),active INTEGER NOT NULL DEFAULT 1);
- CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires INTEGER NOT NULL);
- CREATE TABLE IF NOT EXISTS attempts(email TEXT PRIMARY KEY,count INTEGER NOT NULL,until_at INTEGER NOT NULL);
- CREATE TABLE IF NOT EXISTS enquiries(id TEXT PRIMARY KEY,customer_id TEXT NOT NULL REFERENCES users(id),assigned_to TEXT REFERENCES users(id),destination TEXT NOT NULL,requirements TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'New',followup TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS activity(id TEXT PRIMARY KEY,actor_id TEXT NOT NULL REFERENCES users(id),message TEXT NOT NULL,created_at TEXT NOT NULL);
- `);
-  return connection;
+  return database;
 }
 export type Role = 'admin' | 'team' | 'customer';
 export type User = { id: string; name: string; email: string; role: Role; active: number };
@@ -31,8 +141,12 @@ export type Enquiry = {
   customer_name: string;
   employee_name: string | null;
 };
-export function recordActivity(actorId: string, message: string) {
-  db()
-    .prepare('INSERT INTO activity VALUES(?,?,?,?)')
-    .run(crypto.randomUUID(), actorId, message, new Date().toISOString());
+export async function recordActivity(actorId: string, message: string) {
+  await db().run(
+    'INSERT INTO activity(id,actor_id,message,created_at) VALUES($1,$2,$3,$4)',
+    crypto.randomUUID(),
+    actorId,
+    message,
+    new Date().toISOString(),
+  );
 }

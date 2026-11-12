@@ -4,25 +4,30 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { getSiteContent } from '@/lib/content/service';
-export function generateStaticParams() {
-  const { articleCards } = getSiteContent();
-
+export async function generateStaticParams() {
+  const { articleCards } = await getSiteContent();
   return articleCards.map((a) => ({ slug: a.slug }));
 }
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }): Promise<Metadata> {
-  const { articleCards } = getSiteContent();
-
+  const { articleCards } = await getSiteContent();
   const { slug } = await params;
   const a = articleCards.find((a) => a.slug === slug);
   return { title: a?.title ?? 'Article not found', description: a?.excerpt };
 }
-export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { articleCards } = getSiteContent();
-
+export default async function ArticlePage({
+  params,
+}: {
+  params: Promise<{
+    slug: string;
+  }>;
+}) {
+  const { articleCards } = await getSiteContent();
   const { slug } = await params;
   const article = articleCards.find((a) => a.slug === slug);
   if (!article) notFound();

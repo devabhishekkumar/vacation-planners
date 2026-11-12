@@ -9,10 +9,13 @@ export const metadata: Metadata = {
 export default async function PackagesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ destination?: string; type?: string; duration?: string }>;
+  searchParams: Promise<{
+    destination?: string;
+    type?: string;
+    duration?: string;
+  }>;
 }) {
-  const { photos, packages, destinations } = getSiteContent();
-
+  const { photos, packages, destinations } = await getSiteContent();
   const filters = await searchParams;
   return (
     <>

@@ -9,8 +9,8 @@ import {
 } from '@/lib/booking-service';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export function GET() {
-  return NextResponse.json(bookingSnapshot(), { headers: { 'Cache-Control': 'no-store' } });
+export async function GET() {
+  return NextResponse.json(await bookingSnapshot(), { headers: { 'Cache-Control': 'no-store' } });
 }
 export async function POST(request: NextRequest) {
   if (request.headers.get('origin') !== request.nextUrl.origin)
@@ -19,15 +19,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const snapshot =
       body.operation === 'price'
-        ? setBookingPrice(body.id, Number(body.amount))
+        ? await setBookingPrice(body.id, Number(body.amount))
         : body.operation === 'create'
-          ? createBooking(body.item)
+          ? await createBooking(body.item)
           : body.operation === 'status'
-            ? updateBookingStatus(body.id, body.status)
+            ? await updateBookingStatus(body.id, body.status)
             : body.operation === 'payment'
-              ? recordBookingPayment(body.item)
+              ? await recordBookingPayment(body.item)
               : body.operation === 'import'
-                ? importLocalBookings(body.bookings, body.payments)
+                ? await importLocalBookings(body.bookings, body.payments)
                 : null;
     if (!snapshot)
       return NextResponse.json({ error: 'Unknown booking operation.' }, { status: 400 });

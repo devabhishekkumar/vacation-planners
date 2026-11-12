@@ -12,10 +12,10 @@ Signup signs the customer in immediately. No email verification, password-reset 
 
 Booking requests remain Pending until the team sets pricing and confirms availability. No online payment is collected. Login does not create a booking by itself: the customer chooses dates and submits the booking form. A session-only draft preserves entered booking details if they need to sign in again.
 
-Checks: npm.cmd run test:customer-auth; npm.cmd run test:bookings; node tests/website-booking-http.test.cjs after npm.cmd run build.
+Checks: `npm.cmd run test:customer-auth`; `npm.cmd run test:bookings`; `node scripts/test-postgres.cjs tests/website-booking-http.test.cjs` after `npm.cmd run build`. See [PostgreSQL setup](POSTGRES_MIGRATION.md).
 
 ## Customer profile
 
 Signed-in customers can open /customer/profile from My bookings. They can edit their name, phone, city, address and travel preferences. Login email is read-only. Profile records are stored in customer_profiles and scoped to the authenticated account; submitted account IDs and email changes are ignored. Saved name and phone prefill new booking forms. Existing bookings retain their original contact details.
 
-Checks: npm.cmd run test:customer-profile; node tests/customer-profile-http.test.cjs after building.
+Checks: `npm.cmd run test:customer-profile`; `node scripts/test-postgres.cjs tests/customer-profile-http.test.cjs` after building.

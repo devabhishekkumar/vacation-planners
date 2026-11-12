@@ -9,17 +9,25 @@ import '../portal.css';
 export const dynamic = 'force-dynamic';
 export default async function MyBookings() {
   const user = await requireCustomer();
-  const { bookings, payments } = customerBookings(user.id);
+  const { bookings, payments } = await customerBookings(user.id);
   const travel = travelDatabase();
   const updates = new Map(
-    bookings.map((booking) => [
-      booking.id,
-      Number(
-        travel
-          .prepare('SELECT count(*) count FROM trip_notifications WHERE booking_id=? AND is_read=0')
-          .get(booking.id)?.count || 0,
+    await Promise.all(
+      bookings.map(
+        async (booking) =>
+          [
+            booking.id,
+            Number(
+              (
+                await travel.get(
+                  'SELECT count(*) count FROM trip_notifications WHERE booking_id=$1 AND is_read=0',
+                  booking.id,
+                )
+              )?.count || 0,
+            ),
+          ] as const,
       ),
-    ]),
+    ),
   );
   return (
     <>

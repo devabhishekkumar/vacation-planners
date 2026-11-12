@@ -1,4 +1,4 @@
-﻿import { db } from '../auth/database';
+import { db } from '../auth/database';
 import { destinations, packages, galleryItems, articleCards, photos } from '../../data/site';
 import {
   contentDefinitions,
@@ -9,14 +9,10 @@ import { TravelError } from '../travel/errors';
 export const defaultContent = (): SiteContent =>
   structuredClone({ destinations, packages, galleryItems, articleCards, photos });
 function database() {
-  const d = db();
-  d.exec(
-    'CREATE TABLE IF NOT EXISTS website_content(id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL)',
-  );
-  return d;
+  return db();
 }
-export function contentSnapshot() {
-  const row = database().prepare('SELECT * FROM website_content WHERE id=1').get();
+export async function contentSnapshot() {
+  const row = await database().get('SELECT * FROM website_content WHERE id=1');
   return row
     ? {
         revision: Number(row.revision),
@@ -25,9 +21,9 @@ export function contentSnapshot() {
       }
     : { revision: 0, content: defaultContent(), updatedAt: null };
 }
-export const getSiteContent = () => contentSnapshot().content;
-export const getPublishedPackage = (slug: string) =>
-  getSiteContent().packages.find((p) => p.slug === slug);
+export const getSiteContent = async () => (await contentSnapshot()).content;
+export const getPublishedPackage = async (slug: string) =>
+  (await getSiteContent()).packages.find((p) => p.slug === slug);
 function image(value: string) {
   if (/^\/(?:images|uploads)\/[a-zA-Z0-9/_.-]+$/.test(value)) return;
   try {
@@ -127,22 +123,20 @@ export function validateContent(input: unknown): SiteContent {
     );
   return result;
 }
-export function publishContent(revision: unknown, input: unknown) {
+export async function publishContent(revision: unknown, input: unknown) {
   if (!Number.isInteger(revision)) throw new TravelError('Invalid content version.');
   const content = validateContent(input),
     d = database();
-  d.exec('BEGIN IMMEDIATE');
-  try {
-    const current = contentSnapshot();
+  return await d.transaction(async () => {
+    const current = await contentSnapshot();
     if (current.revision !== revision)
       throw new TravelError('Website content changed elsewhere. Reload before publishing.', 409);
-    d.prepare(
-      'INSERT INTO website_content VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at',
-    ).run(Number(revision) + 1, JSON.stringify(content), new Date().toISOString());
-    d.exec('COMMIT');
-    return contentSnapshot();
-  } catch (error) {
-    d.exec('ROLLBACK');
-    throw error;
-  }
+    await d.run(
+      'INSERT INTO website_content(id,revision,payload,updated_at) VALUES(1,$1,$2,$3) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at',
+      Number(revision) + 1,
+      JSON.stringify(content),
+      new Date().toISOString(),
+    );
+    return await contentSnapshot();
+  });
 }

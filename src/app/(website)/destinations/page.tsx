@@ -8,9 +8,8 @@ export const metadata: Metadata = {
   title: 'Destinations',
   description: 'Explore holiday destinations across India and around the world.',
 };
-export default function DestinationsPage() {
-  const { destinations, photos } = getSiteContent();
-
+export default async function DestinationsPage() {
+  const { destinations, photos } = await getSiteContent();
   return (
     <>
       <PageHero

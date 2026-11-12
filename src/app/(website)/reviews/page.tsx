@@ -8,9 +8,8 @@ export const metadata: Metadata = {
   title: 'Customer Stories & Reviews',
   description: 'Travel reviews and guest stories from Vacation Planners.',
 };
-export default function ReviewsPage() {
-  const { photos } = getSiteContent();
-
+export default async function ReviewsPage() {
+  const { photos } = await getSiteContent();
   return (
     <>
       <PageHero

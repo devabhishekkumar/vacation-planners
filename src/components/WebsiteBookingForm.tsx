@@ -29,35 +29,37 @@ export default function WebsiteBookingForm({
   const form = useRef<HTMLFormElement>(null);
   const draftKey = 'vp-booking-draft:' + packageSlug + ':' + customerEmail;
   useEffect(() => {
-    setMinimum(
-      new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).format(new Date()),
-    );
-  }, []);
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(draftKey);
-      if (raw) {
-        const values = JSON.parse(raw) as Record<string, string>;
-        for (const name of [
-          'customer',
-          'phone',
-          'travelers',
-          'returnDate',
-          'passengers',
-          'notes',
-        ]) {
-          const field = form.current?.elements.namedItem(name);
-          if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
-            field.value = String(values[name] || '');
+    // Initialize browser-only values after hydration, and cancel stale restores.
+    const frame = requestAnimationFrame(() => {
+      setMinimum(
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date()),
+      );
+      try {
+        const raw = sessionStorage.getItem(draftKey);
+        if (raw) {
+          const values = JSON.parse(raw) as Record<string, string>;
+          for (const name of [
+            'customer',
+            'phone',
+            'travelers',
+            'returnDate',
+            'passengers',
+            'notes',
+          ]) {
+            const field = form.current?.elements.namedItem(name);
+            if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)
+              field.value = String(values[name] || '');
+          }
+          if (values.travelDate) setDeparture(String(values.travelDate));
         }
-        if (values.travelDate) setDeparture(String(values.travelDate));
-      }
-    } catch {}
+      } catch {}
+    });
+    return () => cancelAnimationFrame(frame);
   }, [draftKey]);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

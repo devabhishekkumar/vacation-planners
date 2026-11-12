@@ -1,11 +1,12 @@
-﻿/* eslint-disable @typescript-eslint/no-require-imports -- Standalone HTTP integration test. */
+require('./postgres-guard.cjs');
 const assert = require('node:assert/strict'),
   { spawn } = require('node:child_process'),
   fs = require('node:fs'),
   os = require('node:os'),
   path = require('node:path'),
   { randomBytes } = require('node:crypto');
-const port = String(3300 + Math.floor(Math.random() * 1000));
+// The old random range included Fetch-blocked ports such as 4190 (Sieve).
+const port = '3135';
 const base = 'http://localhost:' + port,
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-travel-http-')),
   key = randomBytes(32).toString('hex');
@@ -49,16 +50,23 @@ async function json(response, status = 200) {
 (async () => {
   try {
     let ready = false;
+    let readinessError = '';
     for (let i = 0; i < 120; i++) {
       try {
-        if ((await fetch(base + '/api/travel/session')).ok) {
+        const response = await fetch(base + '/api/travel/session', {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (response.ok) {
           ready = true;
           break;
         }
-      } catch {}
+        readinessError = 'HTTP ' + response.status;
+      } catch (error) {
+        readinessError = error.cause?.message || error.message;
+      }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    assert.ok(ready, logs);
+    assert.ok(ready, readinessError + '\n' + logs);
     assert.equal((await request('/api/content')).status, 401);
     assert.equal((await request('/api/travel/missing')).status, 401);
     assert.equal(

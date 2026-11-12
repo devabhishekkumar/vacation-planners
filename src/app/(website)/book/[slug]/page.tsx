@@ -4,15 +4,20 @@ import { notFound } from 'next/navigation';
 import { getSiteContent } from '@/lib/content/service';
 import { requireCustomer } from '@/lib/auth/customer-session';
 import WebsiteBookingForm from '@/components/WebsiteBookingForm';
-export default async function BookPackage({ params }: { params: Promise<{ slug: string }> }) {
-  const { packages } = getSiteContent();
+export default async function BookPackage({
+  params,
+}: {
+  params: Promise<{
+    slug: string;
+  }>;
+}) {
+  const { packages } = await getSiteContent();
   const getPackage = (slug: string) => packages.find((p) => p.slug === slug);
-
   const { slug } = await params;
   const tour = getPackage(slug);
   if (!tour) notFound();
   const customer = await requireCustomer('/book/' + tour.slug);
-  const profile = customerProfile(customer.id);
+  const profile = await customerProfile(customer.id);
   return (
     <section className="section section-warm">
       <div className="container enquiry-section-layout">

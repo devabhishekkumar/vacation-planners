@@ -1,4 +1,4 @@
-﻿import SiteHeader from '@/components/SiteHeader';
+import SiteHeader from '@/components/SiteHeader';
 import Link from 'next/link';
 import { requireCustomer } from '@/lib/auth/customer-session';
 import { customerBookings } from '@/lib/booking-service';
@@ -7,7 +7,7 @@ import '@/components/travel/travel.css';
 export const dynamic = 'force-dynamic';
 export default async function MyTravel() {
   const user = await requireCustomer('/customer/travel');
-  const { bookings } = customerBookings(user.id);
+  const { bookings } = await customerBookings(user.id);
   const d = travelDatabase();
   return (
     <>
@@ -32,12 +32,11 @@ export default async function MyTravel() {
             </div>
           ) : (
             <div className="tm-card-grid">
-              {bookings.map((b) => {
-                const count = d
-                  .prepare(
-                    'SELECT count(*) count FROM trip_notifications WHERE booking_id=? AND is_read=0',
-                  )
-                  .get(b.id);
+              {bookings.map(async (b) => {
+                const count = await d.get(
+                  'SELECT count(*) count FROM trip_notifications WHERE booking_id=$1 AND is_read=0',
+                  b.id,
+                );
                 return (
                   <article className="tm-card tm-booking-link" key={b.id}>
                     <span className={`tm-status tm-${b.status.toLowerCase()}`}>{b.status}</span>

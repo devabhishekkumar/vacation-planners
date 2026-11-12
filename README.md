@@ -1,5 +1,7 @@
 # Workspace access update
 
+The server database now uses Neon PostgreSQL through the private `DATABASE_URL`. See [database setup, safe SQLite migration, verification, and Vercel deployment](POSTGRES_MIGRATION.md). Run `npm.cmd run db:migrate` before starting the app and use `npm.cmd test` for isolated PostgreSQL tests.
+
 Customer login/signup is required before website booking. Book now returns customers to their selected package after sign-in; `/customer` shows their linked bookings. Admin and Team remain open at `/admin` and `/team`. See [CUSTOMER_BOOKING_AUTH.md](CUSTOMER_BOOKING_AUTH.md).
 
 # Vacation Planners — Website + CRM Dashboard (Frontend Demo)
@@ -141,5 +143,7 @@ The source has passed a TypeScript/TSX **syntax transpilation check** in the han
 Use `npm.cmd run format` to apply Prettier and `npm.cmd run format:check` to check formatting. The project uses `.prettierrc.json` and [Prettier ignore rules](https://prettier.io/docs/ignore.html). VS Code format on save is enabled with the recommended Prettier extension. The formatter script prefers a project-local Prettier installation and falls back to the installed VS Code extension when package downloads are unavailable.
 
 # vacation-planners-frontend
-#   v a c a t i o n - p l a n n e r s  
+
+#   v a c a t i o n - p l a n n e r s 
+ 
  

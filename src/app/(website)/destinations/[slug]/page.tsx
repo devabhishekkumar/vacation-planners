@@ -5,19 +5,19 @@ import type { Metadata } from 'next';
 import { ArrowUpRight, ChevronRight, MapPin } from 'lucide-react';
 import PackageCard from '@/components/PackageCard';
 import { getSiteContent } from '@/lib/content/service';
-export function generateStaticParams() {
-  const { destinations } = getSiteContent();
-
+export async function generateStaticParams() {
+  const { destinations } = await getSiteContent();
   return destinations.map((d) => ({ slug: d.slug }));
 }
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }): Promise<Metadata> {
-  const { destinations } = getSiteContent();
+  const { destinations } = await getSiteContent();
   const getDestination = (slug: string) => destinations.find((d) => d.slug === slug);
-
   const { slug } = await params;
   const d = getDestination(slug);
   return { title: d ? `${d.name} Holidays` : 'Destination not found', description: d?.description };
@@ -25,11 +25,12 @@ export async function generateMetadata({
 export default async function DestinationDetails({
   params,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{
+    slug: string;
+  }>;
 }) {
-  const { destinations, packages } = getSiteContent();
+  const { destinations, packages } = await getSiteContent();
   const getDestination = (slug: string) => destinations.find((d) => d.slug === slug);
-
   const { slug } = await params;
   const destination = getDestination(slug);
   if (!destination) notFound();

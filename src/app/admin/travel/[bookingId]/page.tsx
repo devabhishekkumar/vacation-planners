@@ -1,11 +1,17 @@
-﻿import { travelOperator } from '@/lib/travel/operator';
+import { travelOperator } from '@/lib/travel/operator';
 import { travelBooking } from '@/lib/travel/service';
 import { notFound } from 'next/navigation';
 import OperatorAccess from '@/components/travel/OperatorAccess';
 import TravelManager from '@/components/travel/TravelManager';
 import '@/components/travel/travel.css';
 export const dynamic = 'force-dynamic';
-export default async function ManageTravel({ params }: { params: Promise<{ bookingId: string }> }) {
+export default async function ManageTravel({
+  params,
+}: {
+  params: Promise<{
+    bookingId: string;
+  }>;
+}) {
   if (!(await travelOperator()))
     return (
       <div className="tm-page">
@@ -18,7 +24,7 @@ export default async function ManageTravel({ params }: { params: Promise<{ booki
     );
   const { bookingId } = await params;
   try {
-    travelBooking(bookingId, { admin: true });
+    await travelBooking(bookingId, { admin: true });
   } catch {
     notFound();
   }

@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { db } from './auth/database';
 export type Review = {
   id: string;
@@ -10,31 +10,26 @@ export type Review = {
   createdAt: string;
 };
 function database() {
-  const d = db();
-  d.exec(
-    'CREATE TABLE IF NOT EXISTS website_reviews(id TEXT PRIMARY KEY,name TEXT NOT NULL,destination TEXT NOT NULL,rating INTEGER NOT NULL,body TEXT NOT NULL,published INTEGER NOT NULL DEFAULT 0,permission INTEGER NOT NULL,created_at TEXT NOT NULL)',
-  );
-  return d;
+  return db();
 }
-export function reviews(publishedOnly = true): Review[] {
-  return database()
-    .prepare(
+export async function reviews(publishedOnly = true): Promise<Review[]> {
+  return (
+    await database().all(
       'SELECT id,name,destination,rating,body,published,created_at FROM website_reviews' +
         (publishedOnly ? ' WHERE published=1 AND permission=1' : '') +
-        ' ORDER BY created_at DESC,rowid DESC',
+        ' ORDER BY created_at DESC,insertion_order DESC',
     )
-    .all()
-    .map((r) => ({
-      id: String(r.id),
-      name: String(r.name),
-      destination: String(r.destination),
-      rating: Number(r.rating),
-      body: String(r.body),
-      published: Boolean(r.published),
-      createdAt: String(r.created_at),
-    }));
+  ).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    destination: String(r.destination),
+    rating: Number(r.rating),
+    body: String(r.body),
+    published: Boolean(r.published),
+    createdAt: String(r.created_at),
+  }));
 }
-export function createReview(input: {
+export async function createReview(input: {
   name: unknown;
   destination: unknown;
   rating: unknown;
@@ -56,14 +51,24 @@ export function createReview(input: {
     throw Error('Choose a rating from 1 to 5.');
   if (!input.permission) throw Error('Confirm permission to publish this customer review.');
   const id = randomUUID();
-  database()
-    .prepare('INSERT INTO website_reviews VALUES(?,?,?,?,?,?,?,?)')
-    .run(id, name, destination, rating, body, input.published ? 1 : 0, 1, new Date().toISOString());
+  await database().run(
+    'INSERT INTO website_reviews(id,name,destination,rating,body,published,permission,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+    id,
+    name,
+    destination,
+    rating,
+    body,
+    input.published ? 1 : 0,
+    1,
+    new Date().toISOString(),
+  );
   return id;
 }
-export function setReviewPublished(id: string, published: boolean) {
-  const result = database()
-    .prepare('UPDATE website_reviews SET published=? WHERE id=? AND permission=1')
-    .run(published ? 1 : 0, id);
+export async function setReviewPublished(id: string, published: boolean) {
+  const result = await database().run(
+    'UPDATE website_reviews SET published=$1 WHERE id=$2 AND permission=1',
+    published ? 1 : 0,
+    id,
+  );
   if (!result.changes) throw Error('Review not found or publication permission missing.');
 }

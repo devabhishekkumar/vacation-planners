@@ -9,24 +9,31 @@ export type CustomerProfile = {
   updatedAt: string;
 };
 function database() {
-  const d = db();
-  d.exec(
-    `CREATE TABLE IF NOT EXISTS customer_profiles(user_id TEXT PRIMARY KEY REFERENCES users(id),phone TEXT NOT NULL DEFAULT '',city TEXT NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',preferences TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL)`,
-  );
-  return d;
+  return db();
 }
-export function customerProfile(id: string): CustomerProfile {
+export async function customerProfile(id: string): Promise<CustomerProfile> {
   const d = database();
-  const user = d
-    .prepare("SELECT name,email FROM users WHERE id=? AND role='customer' AND active=1")
-    .get(id) as { name: string; email: string } | undefined;
+  const user = (await d.get(
+    "SELECT name,email FROM users WHERE id=$1 AND role='customer' AND active=1",
+    id,
+  )) as
+    | {
+        name: string;
+        email: string;
+      }
+    | undefined;
   if (!user) throw Error('Customer account unavailable.');
-  const profile = d
-    .prepare(
-      'SELECT phone,city,address,preferences,updated_at FROM customer_profiles WHERE user_id=?',
-    )
-    .get(id) as
-    | { phone: string; city: string; address: string; preferences: string; updated_at: string }
+  const profile = (await d.get(
+    'SELECT phone,city,address,preferences,updated_at FROM customer_profiles WHERE user_id=$1',
+    id,
+  )) as
+    | {
+        phone: string;
+        city: string;
+        address: string;
+        preferences: string;
+        updated_at: string;
+      }
     | undefined;
   return {
     ...user,
@@ -43,8 +50,8 @@ function field(value: unknown, label: string, max: number) {
   if (result.length > max) throw Error(label + ' must be no more than ' + max + ' characters.');
   return result;
 }
-export function saveCustomerProfile(id: string, input: Record<string, unknown>) {
-  customerProfile(id);
+export async function saveCustomerProfile(id: string, input: Record<string, unknown>) {
+  await customerProfile(id);
   const name = field(input.name, 'name', 90),
     phone = field(input.phone, 'phone number', 28),
     city = field(input.city, 'city', 90),
@@ -59,16 +66,17 @@ export function saveCustomerProfile(id: string, input: Record<string, unknown>) 
   )
     throw Error('Enter a valid phone number, including country code where possible.');
   const d = database();
-  d.exec('BEGIN IMMEDIATE');
-  try {
-    d.prepare('UPDATE users SET name=? WHERE id=?').run(name, id);
-    d.prepare(
-      'INSERT INTO customer_profiles VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,city=excluded.city,address=excluded.address,preferences=excluded.preferences,updated_at=excluded.updated_at',
-    ).run(id, phone, city, address, preferences, new Date().toISOString());
-    d.exec('COMMIT');
-    return customerProfile(id);
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+  return await d.transaction(async () => {
+    await d.run('UPDATE users SET name=$1 WHERE id=$2', name, id);
+    await d.run(
+      'INSERT INTO customer_profiles(user_id,phone,city,address,preferences,updated_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,city=excluded.city,address=excluded.address,preferences=excluded.preferences,updated_at=excluded.updated_at',
+      id,
+      phone,
+      city,
+      address,
+      preferences,
+      new Date().toISOString(),
+    );
+    return await customerProfile(id);
+  });
 }

@@ -6,11 +6,7 @@ const text = (v: unknown, max: number) =>
     .trim()
     .slice(0, max);
 function database() {
-  const d = db();
-  d.exec(
-    'CREATE TABLE IF NOT EXISTS admin_leads(id TEXT PRIMARY KEY,payload TEXT NOT NULL,submission_key TEXT UNIQUE)',
-  );
-  return d;
+  return db();
 }
 function validDate(value: string) {
   return (
@@ -51,58 +47,63 @@ function validate(input: Partial<Lead>): Lead {
     nextFollowUp: '',
   };
 }
-export function allLeads() {
-  return database()
-    .prepare('SELECT payload FROM admin_leads ORDER BY rowid DESC')
-    .all()
-    .map((r) => JSON.parse(r.payload as string) as Lead);
+export async function allLeads() {
+  return (
+    await database().all('SELECT payload FROM admin_leads ORDER BY insertion_order DESC')
+  ).map((r) => JSON.parse(r.payload as string) as Lead);
 }
-export function createLead(input: Partial<Lead>, submissionKey?: string) {
-  const d = database();
-  if (submissionKey) {
-    if (!/^[a-zA-Z0-9-]{16,100}$/.test(submissionKey)) throw Error('Invalid submission reference.');
-    const existing = d
-      .prepare('SELECT id FROM admin_leads WHERE submission_key=?')
-      .get(submissionKey);
-    if (existing) return String(existing.id);
-  }
-  const lead = validate(input);
-  d.prepare('INSERT INTO admin_leads VALUES(?,?,?)').run(
-    lead.id,
-    JSON.stringify(lead),
-    submissionKey || null,
-  );
-  return lead.id;
+export async function createLead(input: Partial<Lead>, submissionKey?: string) {
+  return database().transaction(async () => {
+    const d = database();
+    if (submissionKey) {
+      if (!/^[a-zA-Z0-9-]{16,100}$/.test(submissionKey))
+        throw Error('Invalid submission reference.');
+      const existing = await d.get(
+        'SELECT id FROM admin_leads WHERE submission_key=$1',
+        submissionKey,
+      );
+      if (existing) return String(existing.id);
+    }
+    const lead = validate(input);
+    await d.run(
+      'INSERT INTO admin_leads(id,payload,submission_key) VALUES($1,$2,$3)',
+      lead.id,
+      JSON.stringify(lead),
+      submissionKey || null,
+    );
+    return lead.id;
+  });
 }
-export function patchLead(
+export async function patchLead(
   id: string,
   changes: Partial<Pick<Lead, 'status' | 'owner' | 'nextFollowUp' | 'notes'>>,
 ) {
-  const d = database();
-  const row = d.prepare('SELECT payload FROM admin_leads WHERE id=?').get(id);
-  if (!row) throw Error('Enquiry not found.');
-  const lead = JSON.parse(row.payload as string) as Lead;
-  const next = { ...lead };
-  if (changes.status !== undefined) {
-    if (!leadStatuses.includes(changes.status)) throw Error('Invalid lead status.');
-    next.status = changes.status;
-  }
-  if (changes.owner !== undefined) next.owner = text(changes.owner, 60) || 'Unassigned';
-  if (changes.notes !== undefined) next.notes = text(changes.notes, 3000);
-  if (changes.nextFollowUp !== undefined) {
-    if (!validDate(changes.nextFollowUp)) throw Error('Invalid follow-up date.');
-    next.nextFollowUp = changes.nextFollowUp;
-  }
-  d.prepare('UPDATE admin_leads SET payload=? WHERE id=?').run(JSON.stringify(next), id);
-  return allLeads();
+  return database().transaction(async () => {
+    const d = database();
+    const row = await d.get('SELECT payload FROM admin_leads WHERE id=$1', id);
+    if (!row) throw Error('Enquiry not found.');
+    const lead = JSON.parse(row.payload as string) as Lead;
+    const next = { ...lead };
+    if (changes.status !== undefined) {
+      if (!leadStatuses.includes(changes.status)) throw Error('Invalid lead status.');
+      next.status = changes.status;
+    }
+    if (changes.owner !== undefined) next.owner = text(changes.owner, 60) || 'Unassigned';
+    if (changes.notes !== undefined) next.notes = text(changes.notes, 3000);
+    if (changes.nextFollowUp !== undefined) {
+      if (!validDate(changes.nextFollowUp)) throw Error('Invalid follow-up date.');
+      next.nextFollowUp = changes.nextFollowUp;
+    }
+    await d.run('UPDATE admin_leads SET payload=$1 WHERE id=$2', JSON.stringify(next), id);
+    return await allLeads();
+  });
 }
-export function importLocalLeads(leads: Lead[]) {
+export async function importLocalLeads(leads: Lead[]) {
   const d = database();
   if (!Array.isArray(leads) || leads.length > 2000) throw Error('Invalid enquiry import.');
-  d.exec('BEGIN IMMEDIATE');
-  try {
+  return await d.transaction(async () => {
     for (const item of leads) {
-      if (d.prepare('SELECT id FROM admin_leads WHERE id=?').get(item.id)) continue;
+      if (await d.get('SELECT id FROM admin_leads WHERE id=$1', item.id)) continue;
       const valid = validate(item);
       const lead = {
         ...valid,
@@ -113,12 +114,12 @@ export function importLocalLeads(leads: Lead[]) {
         createdAt: text(item.createdAt, 10) || valid.createdAt,
       };
       if (!lead.id) throw Error('Invalid enquiry reference.');
-      d.prepare('INSERT INTO admin_leads VALUES(?,?,NULL)').run(lead.id, JSON.stringify(lead));
+      await d.run(
+        'INSERT INTO admin_leads(id,payload,submission_key) VALUES($1,$2,NULL)',
+        lead.id,
+        JSON.stringify(lead),
+      );
     }
-    d.exec('COMMIT');
-    return allLeads();
-  } catch (e) {
-    d.exec('ROLLBACK');
-    throw e;
-  }
+    return await allLeads();
+  });
 }

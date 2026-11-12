@@ -9,11 +9,11 @@ export async function currentCustomer(): Promise<CustomerAccount | null> {
   const token = (await cookies()).get(name)?.value;
   if (!token) return null;
   return (
-    (db()
-      .prepare(
-        "SELECT u.id,u.name,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>? AND u.active=1 AND u.role='customer'",
-      )
-      .get(digest(token), Date.now()) as CustomerAccount | undefined) || null
+    ((await db().get(
+      "SELECT u.id,u.name,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=$1 AND s.expires>$2 AND u.active=1 AND u.role='customer'",
+      digest(token),
+      Date.now(),
+    )) as CustomerAccount | undefined) || null
   );
 }
 export async function requireCustomer(next = '/customer') {
@@ -24,16 +24,19 @@ export async function requireCustomer(next = '/customer') {
 export async function endCustomerSession() {
   const jar = await cookies(),
     token = jar.get(name)?.value;
-  if (token) db().prepare('DELETE FROM sessions WHERE token=?').run(digest(token));
+  if (token) await db().run('DELETE FROM sessions WHERE token=$1', digest(token));
   jar.delete(name);
 }
 export async function startCustomerSession(user: CustomerAccount) {
   await endCustomerSession();
   const token = randomBytes(32).toString('hex');
-  db().prepare('DELETE FROM sessions WHERE expires<=?').run(Date.now());
-  db()
-    .prepare('INSERT INTO sessions VALUES(?,?,?)')
-    .run(digest(token), user.id, Date.now() + 8 * 60 * 60 * 1000);
+  await db().run('DELETE FROM sessions WHERE expires<=$1', Date.now());
+  await db().run(
+    'INSERT INTO sessions(token,user_id,expires) VALUES($1,$2,$3)',
+    digest(token),
+    user.id,
+    Date.now() + 8 * 60 * 60 * 1000,
+  );
   (await cookies()).set(name, token, {
     httpOnly: true,
     sameSite: 'lax',

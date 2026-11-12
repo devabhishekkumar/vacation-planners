@@ -8,9 +8,8 @@ export const metadata: Metadata = {
   title: 'Travel Journal',
   description: 'Travel guides, destination inspiration and holiday planning tips.',
 };
-export default function BlogPage() {
-  const { articleCards, photos } = getSiteContent();
-
+export default async function BlogPage() {
+  const { articleCards, photos } = await getSiteContent();
   return (
     <>
       <PageHero
@@ -31,7 +30,7 @@ export default function BlogPage() {
             </div>
           </div>
           <div className="blog-grid">
-            {articleCards.map((a, i) => (
+            {articleCards.map((a) => (
               <article className="blog-card" key={a.slug}>
                 <Link href={`/blog/${a.slug}`} className="blog-image">
                   <Image

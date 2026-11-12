@@ -1,3 +1,4 @@
+require('./postgres-guard.cjs');
 const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   path = require('node:path'),
@@ -14,42 +15,55 @@ Module._extensions['.ts'] = (m, p) =>
   );
 const { db } = require('../src/lib/auth/database.ts'),
   { customerProfile, saveCustomerProfile } = require('../src/lib/auth/customer-profile.ts');
-try {
-  for (const id of ['first', 'second'])
-    db()
-      .prepare('INSERT INTO users VALUES(?,?,?,?,?,1)')
-      .run(id, id, id + '@example.test', 'disabled', 'customer');
-  assert.equal(customerProfile('first').phone, '');
-  const input = {
-    name: 'Updated Customer',
-    phone: '+91 98447 57214',
-    city: 'Bengaluru',
-    address: 'Test address',
-    preferences: 'Family holidays',
-    email: 'spoofed@example.test',
-    id: 'second',
-  };
-  let profile = saveCustomerProfile('first', input);
-  assert.equal(profile.name, input.name);
-  assert.equal(profile.phone, input.phone);
-  assert.equal(profile.email, 'first@example.test');
-  assert.equal(customerProfile('second').name, 'second');
-  assert(profile.updatedAt);
-  assert.throws(
-    () => saveCustomerProfile('first', { ...input, phone: 'not-a-number' }),
-    /valid phone/,
-  );
-  assert.throws(() => saveCustomerProfile('first', { ...input, name: 'x' }), /full name/);
-  assert.throws(
-    () => saveCustomerProfile('first', { ...input, address: 'a'.repeat(401) }),
-    /no more than/,
-  );
-  assert.equal(customerProfile('first').name, input.name);
-  db().prepare('UPDATE users SET active=0 WHERE id=?').run('second');
-  assert.throws(() => saveCustomerProfile('second', input), /unavailable/);
-  console.log(
-    'PASS: profile defaults, contact persistence, immutable email, account isolation and field validation.',
-  );
-} finally {
-  db().close();
-}
+(async () => {
+  try {
+    for (const id of ['first', 'second'])
+      await db().run(
+        'INSERT INTO users(id,name,email,password,role,active) VALUES($1,$2,$3,$4,$5,1)',
+        id,
+        id,
+        id + '@example.test',
+        'disabled',
+        'customer',
+      );
+    assert.equal((await customerProfile('first')).phone, '');
+    const input = {
+      name: 'Updated Customer',
+      phone: '+91 98447 57214',
+      city: 'Bengaluru',
+      address: 'Test address',
+      preferences: 'Family holidays',
+      email: 'spoofed@example.test',
+      id: 'second',
+    };
+    let profile = await saveCustomerProfile('first', input);
+    assert.equal(profile.name, input.name);
+    assert.equal(profile.phone, input.phone);
+    assert.equal(profile.email, 'first@example.test');
+    assert.equal((await customerProfile('second')).name, 'second');
+    assert(profile.updatedAt);
+    await assert.rejects(
+      async () => await saveCustomerProfile('first', { ...input, phone: 'not-a-number' }),
+      /valid phone/,
+    );
+    await assert.rejects(
+      async () => await saveCustomerProfile('first', { ...input, name: 'x' }),
+      /full name/,
+    );
+    await assert.rejects(
+      async () => await saveCustomerProfile('first', { ...input, address: 'a'.repeat(401) }),
+      /no more than/,
+    );
+    assert.equal((await customerProfile('first')).name, input.name);
+    await db().run('UPDATE users SET active=0 WHERE id=$1', 'second');
+    await assert.rejects(async () => await saveCustomerProfile('second', input), /unavailable/);
+    console.log(
+      'PASS: profile defaults, contact persistence, immutable email, account isolation and field validation.',
+    );
+  } finally {
+    await db().close();
+  }
+})().catch((e) => {
+  console.error(e);
+  process.exitCode = 1;
+});

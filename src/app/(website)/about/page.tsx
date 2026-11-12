@@ -8,9 +8,8 @@ export const metadata: Metadata = {
   title: 'About Us',
   description: 'Learn the story and travel philosophy behind Vacation Planners.',
 };
-export default function AboutPage() {
-  const { photos } = getSiteContent();
-
+export default async function AboutPage() {
+  const { photos } = await getSiteContent();
   return (
     <>
       <PageHero
@@ -31,13 +30,13 @@ export default function AboutPage() {
               className="image-cover"
             />
             <span className="about-image-stamp">
-              LET'S SEE THE WORLD <span>✳</span>
+              LET&apos;S SEE THE WORLD <span>✳</span>
             </span>
           </div>
           <div className="about-story-copy">
             <span className="eyebrow">OUR TRAVEL PHILOSOPHY</span>
             <h2>
-              Travel isn't about ticking boxes. <em>It's about feeling alive.</em>
+              Travel isn&apos;t about ticking boxes. <em>It&apos;s about feeling alive.</em>
             </h2>
             <p>
               At Vacation Planners, our vision is to make the planning part feel as exciting as the
@@ -49,8 +48,8 @@ export default function AboutPage() {
               people you love.
             </p>
             <p>
-              Share your ideas, your style and what matters most to you. Together, we'll turn those
-              thoughts into a thoughtful travel plan.
+              Share your ideas, your style and what matters most to you. Together, we&apos;ll turn
+              those thoughts into a thoughtful travel plan.
             </p>
             <Link href="/contact" className="btn btn-dark">
               Tell us your travel dream <ArrowUpRight size={17} />

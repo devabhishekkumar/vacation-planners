@@ -1,3 +1,4 @@
+require('./postgres-guard.cjs');
 const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   path = require('node:path'),
@@ -23,7 +24,7 @@ const auth = require('../src/lib/auth/customer-account.ts'),
   };
   const user = await auth.signupCustomer(input);
   assert.equal(user.email, 'customer@example.test');
-  let stored = db().prepare('SELECT * FROM users WHERE id=?').get(user.id);
+  let stored = await db().get('SELECT * FROM users WHERE id=$1', user.id);
   assert.equal(stored.role, 'customer');
   assert.notEqual(stored.password, input.password);
   assert.equal(
@@ -31,13 +32,13 @@ const auth = require('../src/lib/auth/customer-account.ts'),
     user.id,
   );
   await assert.rejects(
-    () => auth.loginCustomer({ email: input.email, password: 'wrong' }),
+    async () => await auth.loginCustomer({ email: input.email, password: 'wrong' }),
     /Invalid email/,
   );
-  await assert.rejects(() => auth.signupCustomer(input), /already exists/);
+  await assert.rejects(async () => await auth.signupCustomer(input), /already exists/);
   await assert.rejects(
-    () =>
-      auth.signupCustomer({
+    async () =>
+      await auth.signupCustomer({
         ...input,
         email: 'new@example.test',
         password: 'short',
@@ -46,12 +47,13 @@ const auth = require('../src/lib/auth/customer-account.ts'),
     /12 to 128/,
   );
   await assert.rejects(
-    () => auth.signupCustomer({ ...input, email: 'new@example.test', confirm: 'mismatch' }),
+    async () =>
+      await auth.signupCustomer({ ...input, email: 'new@example.test', confirm: 'mismatch' }),
     /do not match/,
   );
-  db().prepare('UPDATE users SET active=0 WHERE id=?').run(user.id);
+  await db().run('UPDATE users SET active=0 WHERE id=$1', user.id);
   await assert.rejects(
-    () => auth.loginCustomer({ email: input.email, password: input.password }),
+    async () => await auth.loginCustomer({ email: input.email, password: input.password }),
     /Invalid email/,
   );
   for (const next of [
@@ -64,12 +66,39 @@ const auth = require('../src/lib/auth/customer-account.ts'),
     assert.equal(auth.customerNext(next), '/customer');
   assert.equal(auth.customerNext('/book/bali-island-discovery'), '/book/bali-island-discovery');
   for (let i = 0; i < 5; i++)
-    await assert.rejects(() =>
-      auth.loginCustomer({ email: 'unknown@example.test', password: 'wrong' }),
+    await assert.rejects(
+      async () => await auth.loginCustomer({ email: 'unknown@example.test', password: 'wrong' }),
     );
   await assert.rejects(
-    () => auth.loginCustomer({ email: 'unknown@example.test', password: 'wrong' }),
+    async () => await auth.loginCustomer({ email: 'unknown@example.test', password: 'wrong' }),
     /Too many/,
+  );
+  const originalRun = db().run;
+  const disconnected = Object.assign(Error('read ECONNRESET'), { code: 'ECONNRESET' });
+  let inserts = 0;
+  db().run = async function (sql, ...values) {
+    if (sql.startsWith('INSERT INTO users')) {
+      inserts++;
+      throw disconnected;
+    }
+    return originalRun.call(this, sql, ...values);
+  };
+  try {
+    await assert.rejects(
+      () => auth.signupCustomer({ ...input, email: 'connection-failure@example.test' }),
+      (error) => error === disconnected,
+    );
+    assert.equal(
+      inserts,
+      1,
+      'Do not retry registration writes or report a reset as a duplicate account.',
+    );
+  } finally {
+    db().run = originalRun;
+  }
+  assert.equal(
+    await db().get('SELECT id FROM users WHERE email=$1', 'connection-failure@example.test'),
+    undefined,
   );
   console.log(
     'PASS: customer signup/login, password hashing, duplicate accounts, inactive accounts, rate limits and safe return URLs.',
@@ -79,4 +108,4 @@ const auth = require('../src/lib/auth/customer-account.ts'),
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => db().close());
+  .finally(async () => await db().close());

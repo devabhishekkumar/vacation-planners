@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 import type { MetadataRoute } from 'next';
 import { getSiteContent } from '@/lib/content/service';
-export default function sitemap(): MetadataRoute.Sitemap {
-  const { articleCards, destinations, packages } = getSiteContent();
-
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const { articleCards, destinations, packages } = await getSiteContent();
   // Replace with the real production domain before enabling indexing.
   const base = 'https://example.com';
   return [

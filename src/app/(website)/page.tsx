@@ -12,7 +12,6 @@ import {
   MessageCircle,
   MoveUpRight,
   Sparkles,
-  Star,
   Waves,
 } from 'lucide-react';
 import { getSiteContent } from '@/lib/content/service';
@@ -22,9 +21,8 @@ import SectionIntro from '@/components/SectionIntro';
 import SearchPanel from '@/components/SearchPanel';
 import Reveal from '@/components/Reveal';
 import { getWhatsappUrl } from '@/lib/utils';
-export default function HomePage() {
-  const { destinations, galleryItems, packages, photos } = getSiteContent();
-
+export default async function HomePage() {
+  const { destinations, galleryItems, packages, photos } = await getSiteContent();
   const whatsapp = getWhatsappUrl('Hello Vacation Planners! I would like to plan my trip.');
   return (
     <>
@@ -67,7 +65,7 @@ export default function HomePage() {
           </div>
           <div className="hero-bottom-note">
             <span className="note-line" />
-            <span>THE WORLD IS WAITING. LET'S EXPLORE.</span>
+            <span>THE WORLD IS WAITING. LET&apos;S EXPLORE.</span>
           </div>
         </div>
         <span className="hero-side-label">EXPLORE · DISCOVER · FEEL ALIVE</span>
@@ -176,7 +174,7 @@ export default function HomePage() {
             <div className="story-copy">
               <span className="eyebrow">THIS IS OUR KIND OF MAGIC</span>
               <h2>
-                It's not just where you go. <em>It's how you feel.</em>
+                It&apos;s not just where you go. <em>It&apos;s how you feel.</em>
               </h2>
               <p>
                 We believe the best journeys aren&apos;t one-size-fits-all. They are made of the
@@ -327,7 +325,7 @@ export default function HomePage() {
               </h2>
               <p>Tell us what you&apos;re dreaming of. We&apos;ll help you find your way there.</p>
               <Link href="/contact" className="btn btn-primary btn-large">
-                Let's plan something beautiful <ArrowUpRight size={19} />
+                Let&apos;s plan something beautiful <ArrowUpRight size={19} />
               </Link>
             </div>
             <span className="cta-decor">✳</span>

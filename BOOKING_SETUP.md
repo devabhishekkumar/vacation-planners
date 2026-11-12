@@ -12,8 +12,8 @@ Open /admin/payments to record advances and subsequent payments with a method an
 
 Open a booking's Details action to review customer information, dates, passengers, notes and payment history. The dashboard and reports use the saved booking/payment totals. Data refreshes every 15 seconds, after changes and when the browser window regains focus.
 
-Bookings and payments use SQLite in .data/accounts.sqlite, or AUTH_DATA_DIR when configured. Use Node.js 24+ and a persistent server disk. Existing browser-only bookings are imported on first load; imported records are deduplicated by booking ID and quotation reference. Previous paid balances are retained as payment history/opening balances. Enquiries also use server storage; quotations, tasks and other workspace records still use browser storage.
+Bookings and payments use Neon PostgreSQL through the private `DATABASE_URL`. Use Node.js 24+ and run `npm.cmd run db:migrate` before starting the app. Follow [POSTGRES_MIGRATION.md](POSTGRES_MIGRATION.md) to preserve existing SQLite data. Existing browser-only bookings are imported on first load; imported records are deduplicated by booking ID and quotation reference. Previous paid balances are retained as payment history/opening balances. Enquiries also use server storage; quotations, tasks and other workspace records still use browser storage.
 
 The public form submits a booking request; it does not automatically reserve supplier inventory. Customer login is required for website booking requests; Admin remains open as previously requested. Do not treat record confirmation as confirmation from a hotel, airline or other travel supplier.
 
-Checks: npm.cmd run test:bookings, node tests/bookings-http.test.cjs (requires a completed build), node tests/website-booking-http.test.cjs, npm.cmd run typecheck, npm.cmd run build.
+Checks: `npm.cmd run test:bookings`, `node scripts/test-postgres.cjs tests/bookings-http.test.cjs tests/website-booking-http.test.cjs` (requires a completed build), `npm.cmd run typecheck`, `npm.cmd run build`.

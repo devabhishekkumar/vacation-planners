@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
   try {
     const input = await request.json();
-    const id = createLead(
+    const id = await createLead(
       {
         name: input.name,
         email: input.email,

@@ -6,9 +6,8 @@ export const metadata: Metadata = {
   title: 'Travel Gallery',
   description: 'Explore inspiring moments and destination photography from around the world.',
 };
-export default function GalleryPage() {
-  const { photos, galleryItems } = getSiteContent();
-
+export default async function GalleryPage() {
+  const { photos, galleryItems } = await getSiteContent();
   return (
     <>
       <PageHero

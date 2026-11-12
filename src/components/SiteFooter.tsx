@@ -26,7 +26,7 @@ export default function SiteFooter() {
     <footer className="footer">
       <div className="container footer-top">
         <div>
-          <span className="eyebrow eyebrow-light">LET'S GO SOMEWHERE</span>
+          <span className="eyebrow eyebrow-light">LET&apos;S GO SOMEWHERE</span>
           <h2>
             Beautiful places.
             <br />

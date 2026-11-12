@@ -14,7 +14,6 @@ export default function GalleryExplorer({ galleryItems }: { galleryItems: typeof
         : galleryItems.filter((item) => item.category === category),
     [category, galleryItems],
   );
-  useEffect(() => setActive(null), [category]);
   useEffect(() => {
     if (active === null) return;
     function onKey(e: KeyboardEvent) {
@@ -34,7 +33,10 @@ export default function GalleryExplorer({ galleryItems }: { galleryItems: typeof
           <button
             key={t}
             type="button"
-            onClick={() => setCategory(t)}
+            onClick={() => {
+              if (category !== t) setActive(null);
+              setCategory(t);
+            }}
             className={category === t ? 'selected' : ''}
             aria-pressed={category === t}
           >

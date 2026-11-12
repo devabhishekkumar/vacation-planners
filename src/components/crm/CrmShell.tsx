@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useRouteToggle } from '@/hooks/useRouteToggle';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -69,8 +70,8 @@ const sectionNames: Record<string, string> = {
 };
 
 export default function CrmShell({ children }: { children: ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState(false);
+  const [menuOpen, setMenuOpen] = useRouteToggle();
+  const [notifications, setNotifications] = useRouteToggle();
   const [search, setSearch] = useState('');
   const { data } = useDemo();
   const pathname = usePathname();
@@ -78,10 +79,6 @@ export default function CrmShell({ children }: { children: ReactNode }) {
   const pending = data.tasks
     .filter((t) => !t.completed)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  useEffect(() => {
-    setMenuOpen(false);
-    setNotifications(false);
-  }, [pathname]);
   return (
     <div className="crm-app">
       {menuOpen && (

@@ -31,18 +31,25 @@ function emailAddress(value: unknown) {
     .toLowerCase()
     .slice(0, 254);
 }
-function limit(key: string) {
-  const now = Date.now();
-  const row = db().prepare('SELECT count,until_at FROM attempts WHERE email=?').get(key) as
-    | { count: number; until_at: number }
-    | undefined;
-  if (row && row.count >= 5 && row.until_at > now)
-    throw Error('Too many attempts. Please try again in 15 minutes.');
-  db()
-    .prepare(
-      'INSERT INTO attempts VALUES(?,1,?) ON CONFLICT(email) DO UPDATE SET count=CASE WHEN until_at<=? THEN 1 ELSE count+1 END,until_at=CASE WHEN until_at<=? THEN excluded.until_at ELSE until_at END',
-    )
-    .run(key, now + 900000, now, now);
+async function limit(key: string) {
+  return db().transaction(async () => {
+    const now = Date.now();
+    const row = (await db().get('SELECT count,until_at FROM attempts WHERE email=$1', key)) as
+      | {
+          count: number;
+          until_at: number;
+        }
+      | undefined;
+    if (row && row.count >= 5 && row.until_at > now)
+      throw Error('Too many attempts. Please try again in 15 minutes.');
+    await db().run(
+      'INSERT INTO attempts(email,count,until_at) VALUES($1,1,$2) ON CONFLICT(email) DO UPDATE SET count=CASE WHEN attempts.until_at<=$3 THEN 1 ELSE attempts.count+1 END,until_at=CASE WHEN attempts.until_at<=$4 THEN excluded.until_at ELSE attempts.until_at END',
+      key,
+      now + 900000,
+      now,
+      now,
+    );
+  });
 }
 export async function loginCustomer(input: {
   email: unknown;
@@ -52,13 +59,15 @@ export async function loginCustomer(input: {
     password = String(input.password || '');
   if (!email || password.length > 128) throw Error('Invalid email or password.');
   const key = 'customer-login:' + email;
-  limit(key);
-  const user = db().prepare("SELECT * FROM users WHERE email=? AND role='customer'").get(email) as
-    | (User & { password: string })
+  await limit(key);
+  const user = (await db().get("SELECT * FROM users WHERE email=$1 AND role='customer'", email)) as
+    | (User & {
+        password: string;
+      })
     | undefined;
   const valid = await matches(password, user?.password || 'disabled');
   if (!user || !valid || !user.active) throw Error('Invalid email or password.');
-  db().prepare('DELETE FROM attempts WHERE email=?').run(key);
+  await db().run('DELETE FROM attempts WHERE email=$1', key);
   return { id: user.id, name: user.name, email: user.email };
 }
 export async function signupCustomer(input: {
@@ -77,17 +86,27 @@ export async function signupCustomer(input: {
   if (password.length < 12 || password.length > 128)
     throw Error('Choose a password of 12 to 128 characters.');
   if (password !== String(input.confirm || '')) throw Error('Passwords do not match.');
-  limit('customer-signup:' + email);
-  if (db().prepare('SELECT id FROM users WHERE email=?').get(email))
+  await limit('customer-signup:' + email);
+  if (await db().get('SELECT id FROM users WHERE email=$1', email))
     throw Error('An account with this email already exists. Sign in or contact our team for help.');
   const user = { id: randomUUID(), name, email };
   const hash = await passwordHash(password);
   try {
-    db()
-      .prepare('INSERT INTO users VALUES(?,?,?,?,?,1)')
-      .run(user.id, name, email, hash, 'customer');
-  } catch {
-    throw Error('An account with this email already exists. Sign in or contact our team for help.');
+    await db().run(
+      'INSERT INTO users(id,name,email,password,role,active) VALUES($1,$2,$3,$4,$5,1)',
+      user.id,
+      name,
+      email,
+      hash,
+      'customer',
+    );
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === '23505')
+      throw Error(
+        'An account with this email already exists. Sign in or contact our team for help.',
+      );
+    // Transport failures are not duplicate accounts and must remain visible.
+    throw error;
   }
   return user;
 }

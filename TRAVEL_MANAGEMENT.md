@@ -2,7 +2,7 @@
 
 ## Setup
 
-Use Node.js 24 or later. Set `TRAVEL_ADMIN_KEY` in `.env.local` (or the production server environment) to a random secret of at least 24 characters, then restart the application. For example, generate a key locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Never use a `NEXT_PUBLIC_` variable for this key.
+Use Node.js 24 or later. Configure `DATABASE_URL` and run `npm.cmd run db:migrate`; see [PostgreSQL setup and SQLite cutover](POSTGRES_MIGRATION.md). Set `TRAVEL_ADMIN_KEY` in `.env.local` (or the production server environment) to a random secret of at least 24 characters, then restart the application. For example, generate a key locally with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Never use a `NEXT_PUBLIC_` variable for this key.
 
 Open **Workspace → Trip management** or **Bookings → Manage Travel**. Unlock with the operator key. This feature-specific admin session lasts eight hours and uses an HttpOnly cookie. The same sign-in protects the Website content editor. Customers continue to use their existing accounts.
 
@@ -13,7 +13,7 @@ Existing Admin/Team screens and booking APIs are unauthenticated in this demo. T
 | Location                             | Responsibility                                                                |
 | ------------------------------------ | ----------------------------------------------------------------------------- |
 | `src/features/travel/types.ts`       | Service models, statuses and form definitions                                 |
-| `src/lib/travel/database.ts`         | Idempotent SQLite migration, version 1                                        |
+| `src/lib/travel/database.ts`         | Shared PostgreSQL connection access                                           |
 | `src/lib/travel/service.ts`          | Validation, ownership, CRUD, confirmation, publishing, uploads, notifications |
 | `src/lib/travel/operator.ts`         | Private operator session and login throttling                                 |
 | `src/lib/travel/http.ts`             | Authentication, bounded request bodies, origin checks, errors                 |
@@ -21,14 +21,14 @@ Existing Admin/Team screens and booking APIs are unauthenticated in this demo. T
 | `src/components/travel/`             | Shared layout, service forms, itinerary editor/timeline, operator sign-in     |
 | `src/app/admin/travel/`              | Admin trip list and booking management                                        |
 | `src/app/customer/travel/`           | Customer trip list and private travel details                                 |
-| `tests/travel-management.test.cjs`   | Isolated SQLite integration checks                                            |
+| `tests/travel-management.test.cjs`   | Isolated PostgreSQL integration checks                                        |
 | `tests/travel-content-http.test.cjs` | Production HTTP integration checks                                            |
 
 ## Database migration
 
-Migration 1 runs automatically on first feature access, in the existing `accounts.sqlite` database under `AUTH_DATA_DIR` (default `.data`). It creates `trip_plans`, `trip_services`, `trip_documents`, `trip_notifications`, their indexes, and `travel_feature_migrations`. It preserves existing records. Plans reference existing `travel_bookings.id`; customer ownership comes exclusively from the booking's existing `customerId`. Unlinked admin bookings are shown to operators but are never matched to customers by a guessed email or phone.
+Versioned PostgreSQL migrations run explicitly through `npm.cmd run db:migrate`. They create the trip tables, indexes and constraints alongside the other application tables. The offline SQLite importer preserves existing records, including WAL data. Plans reference existing `travel_bookings.id`; customer ownership comes exclusively from the booking's existing `customerId`. Unlinked admin bookings are shown to operators but are never matched to customers by a guessed email or phone.
 
-Documents are private SQLite BLOBs, not public files. Back up the whole SQLite database using a SQLite-aware backup process. Persistent storage is required; this does not use temporary serverless disk for production persistence.
+Documents are private PostgreSQL `BYTEA` values, not public files. Neon supplies durable storage; no persistent application disk is needed. Retain original SQLite databases and migration backups until integrity and cutover have been verified.
 
 ## Workflow
 
@@ -53,10 +53,9 @@ Cancelled bookings are read-only. Delete actions require UI confirmation. Concur
 ## Checks
 
 ```powershell
-node tests/travel-management.test.cjs
-node tests/content-management.test.cjs
+node scripts/test-postgres.cjs tests/travel-management.test.cjs tests/content-management.test.cjs
 npm.cmd run build
-node tests/travel-content-http.test.cjs
+node scripts/test-postgres.cjs tests/travel-content-http.test.cjs
 npm.cmd run typecheck
 npm.cmd run format
 npm.cmd run format:check

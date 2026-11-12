@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useRouteToggle } from '@/hooks/useRouteToggle';
 import { ArrowUpRight, Menu, X } from 'lucide-react';
 import Brand from './Brand';
 import ProfileDropdown from './ProfileDropdown';
@@ -15,9 +16,8 @@ const navigation = [
   { href: '/blog', label: 'Travel journal' },
 ];
 export default function SiteHeader() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRouteToggle();
   const pathname = usePathname();
-  useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -25,7 +25,7 @@ export default function SiteHeader() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, setOpen]);
   return (
     <div className="site-navigation">
       <div className="announcement">

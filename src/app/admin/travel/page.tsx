@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { travelOperator } from '@/lib/travel/operator';
 import { bookingSnapshot } from '@/lib/booking-service';
 import OperatorAccess from '@/components/travel/OperatorAccess';
@@ -15,7 +15,7 @@ export default async function TravelWorkspace() {
         />
       </div>
     );
-  const { bookings } = bookingSnapshot();
+  const { bookings } = await bookingSnapshot();
   return (
     <div className="tm-page">
       <header className="tm-hero">
